@@ -1,0 +1,139 @@
+# 安装K8s
+
+## 准备环境
+
+```bash
+# centos7 默认开启防火墙服务（firewalld） 而K8s的Master与工作Node之间会有大量的网络通信，安全的做法是再防火墙配置各个组件需要通信的端口号
+sudo systemctl disable firewalld
+sudo systemctl stop firewalld
+# 禁用SELinux，让容器可以读取主机文件系统
+sudo setenforce 0
+# 允许远程登陆
+vi /etc/ssh/sshd_config
+systemctl restart sshd
+reboot
+```
+
+## 安装docker
+
+```bash
+
+# 安装docker
+# 设置仓库
+sudo yum install -y yum-utils \
+  device-mapper-persistent-data \
+  lvm2
+  
+sudo yum-config-manager \
+    --add-repo \
+    http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+# 安装 Docker Engine-Community
+sudo yum install docker-ce docker-ce-cli containerd.io
+# 开机启动
+systemctl enable docker && systemctl start docker
+
+```
+
+
+
+## 使用kubeadm工具快速安装K8s集群
+
+```bash
+# 配置yum源
+cd /etc/yum.repos.d
+sudo vi CentOS-Base.repo
+
+# 添加如下内容
+[kuebrnetes]
+name=Kubernetes Repository
+baseurl=http://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
+enabled=1
+gpgcheck=0
+
+# 安装
+yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+# 开机启动
+systemctl enable kubelet && systemctl start kubelet
+
+# 创建工作空间 
+sudo mkdir /workspace
+# 将默认参数打印到文件 方便以后参照修改
+kubeadm config print init-defaults > init.default.yaml
+```
+
+
+
+# 使用vagrant k8s box
+
+```bash
+# https://app.vagrantup.com/contiv/boxes/k8s-centos
+vagrant init contiv/k8s-centos
+vagrant up
+
+# login user-name:root password:vagrant
+
+# 允许远程登陆
+vi /etc/ssh/sshd_config
+systemctl restart sshd
+```
+
+
+
+
+
+# K8s是什么
+它是一个全新的基于容器技术的分布式架构领先方案。这个方案虽然还很新，但它是谷歌十几年以来大规模应用容器技术的经验积累和升华的重要成果。确切地说，Kubernetes是谷歌严格保密十几年的秘密武器——Borg的一个开源版本。Borg是谷歌的一个久负盛名的内部使用的大规模集群管理系统，它基于容器技术，目的是实现资源管理的自动化，以及跨多个数据中心的资源利用率的最大化
+Kubernetes是一个完备的分布式系统支撑平台。Kubernetes具有完备的集群管理能力，包括多层次的安全防护和准入机制、多租户应用支撑能力、透明的服务注册和服务发现机制、内建的智能负载均衡器、强大的故障发现和自我修复能力、服务滚动升级和在线扩容能力、可扩展的资源自动调度机制，以及多粒度的资源配额管理能力。同时，Kubernetes提供了完善的管理工具，这些工具涵盖了包括开发、部署测试、运维监控在内的各个环节。因此，Kubernetes是一个全新的基于容器技术的分布式架构解决方案，并且是一个一站式的完备的分布式系统开发和支撑平台。
+
+# 为什么要用K8s
+
+# 发展历史
+## 1. 资源即服务(Infrastructure as a service)
+只需向供应商购买相应的基础设施服务，基础设置包含了网络、虚拟化、操作系统等服务，然后在其上面部署数据库、安全组件、运行时环境、最后部署应用即可。
+缺点：每个服务器都要执行一次，不同服务器上配置可能会存在不一致
+## 2. docker
+将所有的服务和应用都打包成docker镜像，在每台主机上直接启动对应的docker，这样开发环境、测试环境、生产环境配置保持一致。并且docker不需要额外运行新操作系统的外销，部署方便。
+缺点：随着docker增加，维护和监控docker繁琐，如果某个docker挂了需要立即部署一个新的，如果请求暴增需要再部署一堆docker，相应的负载均衡相关也要更新
+## 3. K8s
+但是容器化也带了一个问题，例如我需要部署一个JavaWeb项目，用到4台物理机，A、B、C、D，A服务器部署Nginx、B、C部署Tomcat、D服务器部署MySQL服务器，他们之间的网络联通通过基本的TCP就可以访问。但是如果一旦容器化之后，例如我在A服务器上部署Docker-Nginx并将容器例如80端口映射到物理机80端口、B、C服务器上部署Docker-Tomcat并将容器例如8080端口映射到物理机8080端口、D服务器上部署MySQL服务器并将端口3306端口映射到物理机3306端口，并且我们一般容器化就是最大化利用资源，一台物理机上会部署多个Docker容器，你会发现仅端口管理就让人头大，更不用说集群的容错恢复等，那么怎么解决这个问题呢？也就是说容器的集群化有没有好的方案呢？有需求就会有产品，这个产品叫资源管理器。
+Docker公司也意识到这个问题，在2014年12月的 DockerCon上发布Swarm,但是Docker公司在Docker开源项目的发展上，始终保持着绝对的权威和发言权，并在多个场合用实际行动挑战到了其他玩家（比如，CoreOS、RedHat，甚至谷歌和微软）的切身利益。
+Google、RedHat等开源基础设施领域玩家们，共同牵头发起了一个名为CNCF（Cloud Native Computing Foundation）的基金会。这个基金会的目的其实很容易理解：它希望，以Kubernetes项目为基础，建立一个由开源基础设施领域厂商主导的、按照独立基金会方式运营的平台级社区，来对抗以Docker公司为核心的容器商业生态
+docker集群编排管理，它提供了服务发现与调度、负载均衡、服务自愈、服务弹性扩容、横向扩容、存储卷挂载
+
+## docker swarm vs K8s
+
+![img](https://pic2.zhimg.com/80/v2-6e72e3a6179f63824211d64b7a2ef381_720w.jpg)
+
+# 收获
+
+
+
+
+
+### 整体架构
+
+`Kubernetes`主要由`Master`、`Node`两部分组成。Master节点上运行着集群管理相关的一组进程`etcd`、`API Server`、`Controller Manager`、`Scheduler`，后三个组件构成了`Kubernetes`的总控中心，这些进程实现了整个集群的资源管理、`Pod`调度、弹性伸缩、安全控制、系统监控和纠错等管理功能，并且全都是自动完成。在每个`Node`上运行`Kubelet`、`Proxy、Docker daemon`三个组件，负责对本节点上的`Pod`的生命周期进行管理，以及实现服务代理的功能。
+
+![img](https://pic3.zhimg.com/80/v2-6470ea72727615da93366171cf9f04d6_720w.jpg)
+
+- *`etcd`:用于持久化存储集群中所有的资源对象，如`Node`、`Service`、`Pod`、`RC`、`Namespace`等；*
+- `scheduler`:集群中的调度器，负责`Pod`在集群节点中的调度分配。
+- *`API Service`:提供了资源对象的唯一操作入口，其他所有组件都必须通过它提供的API来操作资源数据，通过对相关的资源数据“全量查询”+“变化监听”，这些组件可以很“实时”地完成相关的业务功能。*
+- `Contoller Manager`:集群内部的管理控制中心，其主要目的是实现 *`Kubernetes`集群的故障检测和恢复的自动化工作，比如根据`Controller Manger`的定义完成`Pod`的复制或移除，以确保`Pod`实例数符合`Controller Manager`副本的定义；根据`Service`与`Pod`的管理关系，完成服务的`Endpoints`对象的创建和更新；其他诸如`Node`的发现、管理和状态监控、死亡容器所占磁盘空间及本地缓存的镜像文件的清理等工作也是由`Controller Manager`完成的.*
+- `kubelet`：负责本`Node`节点上的`Pod`的创建、修改、监控、删除等全生命周期管理，同时`Kubelet`定时“上报”本`Node`的状态信息到`API Server`里。
+- `proxy`:实现了`Service`的代理与软件模式的负载均衡器。
+
+
+
+
+
+
+
+
+
+
+
+[一起学习k8s](https://zhuanlan.zhihu.com/p/99397148)
+
+[openstack，docker，mesos，k8s什么关系？](https://www.zhihu.com/question/62985699)
