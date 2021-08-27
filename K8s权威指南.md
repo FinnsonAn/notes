@@ -116,9 +116,15 @@ kube-proxy 是集群中每个节点上运行的网络代理， 实现 Kubernetes
 kube-proxy 维护节点上的网络规则。这些网络规则允许从集群内部或外部的网络会话与 Pod 进行网络通信。
 
 ### 容器运行时（Container Runtime） 
-容器运行环境是负责运行容器的软件。
+容器运行环境是负责运行容器的软件。你需要在集群内每个节点上安装一个 容器运行时 以使 Pod 可以运行在上面。
 Kubernetes 支持多个容器运行环境: Docker、 containerd、CRI-O 以及任何实现 Kubernetes CRI (容器运行环境接口)。
 
+### Pods
+Pod 是可以在 Kubernetes 中创建和管理的、最小的可部署的计算单元。
+Pod （就像在鲸鱼荚或者豌豆荚中）是一组（一个或多个） 容器； 这些容器共享存储、网络、以及怎样运行这些容器的声明。 Pod 中的内容总是并置（colocated）的并且一同调度，在共享的上下文中运行。 Pod 所建模的是特定于应用的“逻辑主机”，其中包含一个或多个应用容器， 这些容器是相对紧密的耦合在一起的。 Pod 不是进程，而是容器运行的环境。
+Kubernetes 集群中的 Pod 主要有两种用法：
+- 运行单个容器的 Pod。"每个 Pod 一个容器"模型是最常见的 Kubernetes 用例； 在这种情况下，可以将 Pod 看作单个容器的包装器，并且 Kubernetes 直接管理 Pod，而不是容器。
+- 运行多个协同工作的容器的 Pod。 Pod 可能封装由多个紧密耦合且需要共享资源的共处容器组成的应用程序。 只有在一些场景中，容器之间紧密关联时你才应该使用这种模式。
 
 ## [高可用拓扑选项](https://kubernetes.io/zh/docs/setup/production-environment/tools/kubeadm/ha-topology/)
 堆叠（Stacked） etcd 拓扑
@@ -129,12 +135,165 @@ etcd 分布式数据存储集群在独立于控制平面节点的其他节点上
 ![img](https://d33wubrfki0l68.cloudfront.net/ad49fffce42d5a35ae0d0cc1186b97209d86b99c/5a6ae/images/kubeadm/kubeadm-ha-topology-external-etcd.svg)
 
 
-# DEMO
+# Minikube DEMO
 
 
 
 
+## [install minikube](https://minikube.sigs.k8s.io/docs/start/)
+基础设施: virtualbox
+1. 以windows为例子 下载安装文件 https://storage.googleapis.com/minikube/releases/latest/minikube-installer.exe
+2. Start your cluster
+```bash
+minikube start
+```
+3. 与集群交互
+```bash
+# 如果已经安装过kubectl 执行如下命令访问你的集群
+kubectl get po -A
+# 如果没有安装过kubectl 执行如下命令下载
+# minikube kubectl -- <kubectl commands>
+minikube kubectl -- get po -A
+# print
 
+C:\Users\shaan>minikube kubectl -- get pods -A
+    > kubectl.exe.sha256: 64 B / 64 B [----------------------] 100.00% ? p/s 0s
+    > kubectl.exe: 45.63 MiB / 45.63 MiB [----------] 100.00% 8.16 MiB p/s 5.8s
+NAMESPACE     NAME                               READY   STATUS    RESTARTS   AGE
+kube-system   coredns-558bd4d5db-ssfrj           1/1     Running   0          2m50s
+kube-system   etcd-minikube                      1/1     Running   0          2m58s
+kube-system   kube-apiserver-minikube            1/1     Running   0          2m58s
+kube-system   kube-controller-manager-minikube   1/1     Running   0          2m58s
+kube-system   kube-proxy-nzv5d                   1/1     Running   0          2m50s
+kube-system   kube-scheduler-minikube            1/1     Running   0          2m58s
+kube-system   storage-provisioner                1/1     Running   1          3m3s
+
+# 打开dashboard
+minikube dashboard
+```
+
+## DEMO1 集群动态更新
+
+### 创建
+配置文件结构如下
+
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-deployment
+      labels:
+        app: nginx
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: nginx
+      template:
+        metadata:
+          labels:
+            app: nginx
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.14.2
+            ports:
+            - containerPort: 80
+
+
+```bash
+# 创建deployment 
+minikube kubectl -- apply -f https://k8s.io/examples/controllers/nginx-deployment.yaml
+# 运行 kubectl get deployments 检查 Deployment 是否已创建
+minikube kubectl -- get deployments
+```
+    NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+    nginx-deployment   3         0         0            0           1s
+
+```bash
+# 查看Pods
+minikube kubectl -- get pods
+
+```
+
+    NAME                                READY   STATUS             RESTARTS   AGE
+    nginx-deployment-66b6c48dd5-l2dlc   1/1     Running            0          32s
+    nginx-deployment-66b6c48dd5-wrfmx   1/1     Running            0          32s
+    nginx-deployment-66b6c48dd5-xtbhb   1/1     Running            0          32s
+
+    - NAME 列出了集群中 Deployment 的名称。
+    - READY 显示应用程序的可用的 副本 数。显示的模式是“就绪个数/期望个数”。
+    - UP-TO-DATE 显示为了达到期望状态已经更新的副本数。
+    - AVAILABLE 显示应用可供用户使用的副本数。
+    - AGE 显示应用程序运行的时间。
+
+### 更新
+
+```bash
+# 更新镜像版本
+minikube kubectl -- set image deployment/nginx-deployment nginx=nginx:1.16.1 --record
+deployment.apps/nginx-deployment image updated
+```
+
+```bash
+# 查看Pods
+minikube kubectl -- get pods
+
+```
+    NAME                                READY   STATUS             RESTARTS   AGE
+    nginx-deployment-559d658b74-5mcpz   1/1     Running            0          2m5s
+    nginx-deployment-559d658b74-g4jqd   1/1     Running            0          108s
+    nginx-deployment-559d658b74-n6x75   1/1     Running            0          110s
+
+```bash
+# 获取deployment 更多信息
+minikube kubectl -- describe deployments
+```
+
+    Name:                   nginx-deployment
+    Namespace:              default
+    CreationTimestamp:      Fri, 27 Aug 2021 19:02:42 +0800
+    Labels:                 app=nginx
+    Annotations:            deployment.kubernetes.io/revision: 2
+                            kubernetes.io/change-cause: kubectl.exe set image deployment/nginx-deployment nginx=nginx:1.16.1 --cluster=minikube --record=true
+    Selector:               app=nginx
+    Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+    StrategyType:           RollingUpdate
+    MinReadySeconds:        0
+    RollingUpdateStrategy:  25% max unavailable, 25% max surge
+    Pod Template:
+      Labels:  app=nginx
+      Containers:
+      nginx:
+        Image:        nginx:1.16.1
+        Port:         80/TCP
+        Host Port:    0/TCP
+        Environment:  <none>
+        Mounts:       <none>
+      Volumes:        <none>
+    Conditions:
+      Type           Status  Reason
+      ----           ------  ------
+      Available      True    MinimumReplicasAvailable
+      Progressing    True    NewReplicaSetAvailable
+    OldReplicaSets:  <none>
+    NewReplicaSet:   nginx-deployment-559d658b74 (3/3 replicas created)
+    Events:
+      Type    Reason             Age    From                   Message
+      ----    ------             ----   ----                   -------
+      Normal  ScalingReplicaSet  14m    deployment-controller  Scaled up replica set nginx-deployment-66b6c48dd5 to 3
+      Normal  ScalingReplicaSet  4m11s  deployment-controller  Scaled up replica set nginx-deployment-559d658b74 to 1
+      Normal  ScalingReplicaSet  3m56s  deployment-controller  Scaled down replica set nginx-deployment-66b6c48dd5 to 2
+      Normal  ScalingReplicaSet  3m56s  deployment-controller  Scaled up replica set nginx-deployment-559d658b74 to 2
+      Normal  ScalingReplicaSet  3m54s  deployment-controller  Scaled down replica set nginx-deployment-66b6c48dd5 to 1
+      Normal  ScalingReplicaSet  3m54s  deployment-controller  Scaled up replica set nginx-deployment-559d658b74 to 3
+      Normal  ScalingReplicaSet  3m52s  deployment-controller  Scaled down replica set nginx-deployment-66b6c48dd5 to 0
+
+可以看到，当第一次创建 Deployment 时，它创建了一个 ReplicaSet（nginx-deployment-66b6c48dd5） 并将其直接扩容至 3 个副本。
+更新 Deployment 时，它创建了一个新的 ReplicaSet （nginx-deployment-559d658b74），并将其扩容为 1，然后将旧 ReplicaSet 缩容到 2， 以便至少有 2 个 Pod 可用且最多创建 4 个 Pod。
+ 然后，它使用相同的滚动更新策略继续对新的 ReplicaSet 扩容并对旧的 ReplicaSet 缩容。 最后，你将有 3 个可用的副本在新的 ReplicaSet 中，旧 ReplicaSet 将缩容到 0。
+
+金丝雀部署
+如果要使用 Deployment 向用户子集或服务器子集上线版本，则可以遵循 资源管理 所描述的金丝雀模式，创建多个 Deployment，每个版本一个。
 
 
 参考：
