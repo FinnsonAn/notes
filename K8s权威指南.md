@@ -7,8 +7,6 @@ Kubernetes 这个名字源于希腊语，意为“舵手”或“飞行员”。
 
 
 
-# 为什么要用K8s
-
 # 发展历史
 ![img](https://d33wubrfki0l68.cloudfront.net/26a177ede4d7b032362289c6fccd448fc4a91174/eb693/images/docs/container_evolution.svg)
 
@@ -134,13 +132,30 @@ etcd 分布式数据存储集群堆叠在 kubeadm 管理的控制平面节点上
 etcd 分布式数据存储集群在独立于控制平面节点的其他节点上运行。但是，具有此拓扑的 HA 集群至少需要三个用于控制平面节点的主机和三个用于 etcd 节点的主机。
 ![img](https://d33wubrfki0l68.cloudfront.net/ad49fffce42d5a35ae0d0cc1186b97209d86b99c/5a6ae/images/kubeadm/kubeadm-ha-topology-external-etcd.svg)
 
+# 工作负载 Workloads
 
-# Minikube DEMO
+Kubernetes Pods 有确定的生命周期。 例如，当某 Pod 在你的集群中运行时，Pod 运行所在的 节点 出现致命错误时， 所有该节点上的 Pods 都会失败。Kubernetes 将这类失败视为最终状态  ： 即使该节点后来恢复正常运行，你也需要创建新的 Pod 来恢复应用。
+
+你可以使用 负载资源 来替你管理一组 Pods。 这些资源配置 控制器 来确保合适类型的、处于运行状态的 Pod 个数是正确的，与你所指定的状态相一致。
+
+
+Kubernetes 提供若干种内置的工作负载资源：
+
+- Deployment 和 ReplicaSet （替换原来的资源 ReplicationController）。 Deployment 很适合用来管理你的集群上的无状态应用，Deployment 中的所有 Pod 都是相互等价的，并且在需要的时候被换掉。
+- StatefulSet 让你能够运行一个或者多个以某种方式跟踪应用状态的 Pods。 例如，如果你的负载会将数据作持久存储，你可以运行一个 StatefulSet，将每个 Pod 与某个 PersistentVolume 对应起来。你在 StatefulSet 中各个 Pod 内运行的代码可以将数据复制到同一 StatefulSet 中的其它 Pod 中以提高整体的服务可靠性。
+- DaemonSet 定义提供节点本地支撑设施的 Pods。这些 Pods 可能对于你的集群的运维是 非常重要的，例如作为网络链接的辅助工具或者作为网络 插件 的一部分等等。每次你向集群中添加一个新节点时，如果该节点与某 DaemonSet 的规约匹配，则控制面会为该 DaemonSet 调度一个 Pod 到该新节点上运行。
+Job 和 CronJob。 定义一些一直运行到结束并停止的任务。Job 用来表达的是一次性的任务，而 CronJob 会根据其时间规划反复运行。
+
+# Minikube 
+minikube is local Kubernetes, focusing on making it easy to learn and develop for Kubernetes.
+
+All you need is Docker (or similarly compatible) container or a Virtual Machine environment, and Kubernetes is a single command away: `minikube start`
 
 
 
 
 ## [install minikube](https://minikube.sigs.k8s.io/docs/start/)
+使用k8s在线版minikube https://www.katacoda.com/courses/kubernetes/launch-single-node-cluster
 基础设施: virtualbox
 1. 以windows为例子 下载安装文件 https://storage.googleapis.com/minikube/releases/latest/minikube-installer.exe
 2. Start your cluster
@@ -172,32 +187,32 @@ kube-system   storage-provisioner                1/1     Running   1          3m
 minikube dashboard
 ```
 
-## DEMO1 集群动态更新
+## DEMO nginx集群
 
 ### 创建
-配置文件结构如下
+配置文件结构如下，创建了一个 ReplicaSet，负责启动三个 nginx Pods
 
-    apiVersion: apps/v1
+    apiVersion: apps/v1 # 版本
     kind: Deployment
     metadata:
-      name: nginx-deployment
+      name: nginx-deployment # 名称
       labels:
-        app: nginx
+        app: nginx #
     spec:
-      replicas: 3
-      selector:
+      replicas: 3 # 副本期待的数量
+      selector: # Deployment 如何查找要管理的 Pods
         matchLabels:
-          app: nginx
+          app: nginx # 符合目标的pods 拥有此标签
       template:
-        metadata:
+        metadata: # 根据此模板创建pods
           labels:
-            app: nginx
+            app: nginx # pod副本拥有的标签
         spec:
-          containers:
-          - name: nginx
-            image: nginx:1.14.2
+          containers: # Pod内容器的定义部分
+          - name: nginx # 容器名称
+            image: nginx:1.14.2 # 对应的docker image
             ports:
-            - containerPort: 80
+            - containerPort: 80 # 监听端口号
 
 
 ```bash
@@ -226,7 +241,7 @@ minikube kubectl -- get pods
     - AVAILABLE 显示应用可供用户使用的副本数。
     - AGE 显示应用程序运行的时间。
 
-### 更新
+### 升级更新
 
 ```bash
 # 更新镜像版本
